@@ -1,0 +1,61 @@
+{
+  "kind": "proxmenux.oci-template",
+  "catalog_ui": {
+    "title": { "en_US": "Adoptalia DB" },
+    "tagline": { "en_US": "MySQL 8.0 para Adoptalia" },
+    "category": "databases",
+    "website": "https://www.mysql.com/",
+    "documentation": "https://hub.docker.com/_/mysql",
+    "launch": { "scheme": "http", "port": null, "path": "/" }
+  },
+  "container_contract": {
+    "service_name": "adoptalia-db",
+    "container_name": "adoptalia-db",
+    "image": { "reference": "docker.io/library/mysql:8.0.45" },
+    "ports": [
+      { "container_port": 3306 }
+    ],
+    "environment": [
+      { "name": "MYSQL_ROOT_PASSWORD", "required": true, "sensitive": true,
+        "prompt": "Contraseña de root de MySQL (vacía = se genera)" },
+      { "name": "MYSQL_DATABASE", "example": "adoptalia_db", "prompt": "Nombre de la base de datos" },
+      { "name": "MYSQL_USER", "example": "adoptalia_user", "prompt": "Usuario de la aplicación" },
+      { "name": "MYSQL_PASSWORD", "required": true, "sensitive": true,
+        "prompt": "Contraseña del usuario de la aplicación (la misma que DB_PASSWORD de la app)" },
+      { "name": "MYSQL_INITDB_SKIP_TZINFO", "example": "1", "prompt": "No cargar zonas horarias al iniciar (1)" }
+    ],
+    "volumes": [
+      { "container_path": "/var/lib/mysql",
+        "managed_volume": { "default_size_gb": 8, "backup": true } }
+    ],
+    "restart": "unless-stopped",
+    "stop_grace_period": "60s"
+  },
+  "first_run": {
+    "endpoints": [],
+    "credentials": [
+      { "label": "MySQL (usuario root)",
+        "type": "configured-or-installer-generated",
+        "username": "root", "password": null,
+        "password_environment": "MYSQL_ROOT_PASSWORD",
+        "change_required": false, "source": "mysql-docker-official-image", "retrieval": null }
+    ]
+  },
+  "proxmox": {
+    "defaults": { "memory_mb": 1024, "rootfs_size_gb": 4, "shutdown_timeout_seconds": 90 },
+    "installer_profile": {
+      "generated_sensitive_environment": {
+        "MYSQL_ROOT_PASSWORD": { "strategy": "token-hex", "bytes": 24, "prompt": true },
+        "MYSQL_PASSWORD": { "strategy": "token-hex", "bytes": 24, "prompt": true }
+      },
+      "volume_preparations": [
+        { "container_path": "/var/lib/mysql", "remove_lost_found": true,
+          "owner_strategy": "mapped-root", "only_when_mount_type": "managed-volume" }
+      ],
+      "completion_notes": [
+        "Apunta las contraseñas: MYSQL_PASSWORD es el DB_PASSWORD de la app",
+        "Restaura el volcado (mysql < adoptalia.sql) antes de instalar la app"
+      ]
+    }
+  }
+}

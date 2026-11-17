@@ -1,0 +1,18 @@
+# Contexto de la imagen única (Dockerfile en la raíz)
+.git
+.github
+.env
+.env.*
+**/node_modules
+**/dist
+**/.angular
+**/coverage
+*.log
+data
+db
+backups
+docs
+scripts
+backend/public/uploads
+backend/public/pruebas
+backend/test

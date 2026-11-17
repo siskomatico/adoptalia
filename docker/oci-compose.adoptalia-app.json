@@ -1,0 +1,64 @@
+{
+  "kind": "proxmenux.oci-template",
+  "catalog_ui": {
+    "title": { "en_US": "Adoptalia" },
+    "tagline": { "en_US": "Web de adopción de animales (Angular + Express)" },
+    "category": "tools",
+    "website": "https://adoptalia.es",
+    "launch": { "scheme": "http", "port": 3000, "path": "/" }
+  },
+  "container_contract": {
+    "service_name": "adoptalia-app",
+    "container_name": "adoptalia-app",
+    "image": { "reference": "ghcr.io/siskomatico/adoptalia:latest" },
+    "ports": [
+      { "container_port": 3000 }
+    ],
+    "environment": [
+      { "name": "DB_HOST", "example": "100.10.10.54", "required": true,
+        "prompt": "IP fija de adoptalia-db" },
+      { "name": "DB_USER", "example": "adoptalia_user", "prompt": "Usuario de MySQL" },
+      { "name": "DB_PASSWORD", "required": true, "sensitive": true,
+        "prompt": "Contraseña de MySQL (MYSQL_PASSWORD de adoptalia-db)" },
+      { "name": "DB_NAME", "example": "adoptalia_db", "prompt": "Nombre de la base de datos" },
+      { "name": "JWT_SECRET", "required": true, "sensitive": true,
+        "prompt": "Secreto de las sesiones, mínimo 32 caracteres. Pon el de ahora para no cerrar las sesiones abiertas" },
+      { "name": "TRUST_PROXY", "example": "100.10.10.5", "required": true,
+        "prompt": "IP de cloudflared (solo se cree la IP real del visitante si la petición llega por él)" }
+    ],
+    "volumes": [
+      { "container_path": "/app/public/uploads", "default": "managed-volume",
+        "managed_volume": { "default_size_gb": 4, "backup": true } }
+    ],
+    "restart": "unless-stopped",
+    "stop_grace_period": "15s"
+  },
+  "first_run": {
+    "endpoints": [
+      { "label": "Adoptalia", "scheme": "http", "port": 3000, "path": "/",
+        "source": "Dockerfile: EXPOSE 3000" }
+    ]
+  },
+  "proxmox": {
+    "defaults": { "memory_mb": 1024, "rootfs_size_gb": 4, "shutdown_timeout_seconds": 20 },
+    "installer_profile": {
+      "external_services": ["MySQL"],
+      "generated_sensitive_environment": {
+        "JWT_SECRET": { "strategy": "token-hex", "bytes": 32, "prompt": true }
+      },
+      "volume_preparations": [
+        { "container_path": "/app/public/uploads", "remove_lost_found": true,
+          "owner_strategy": "mapped-root", "only_when_mount_type": "managed-volume" }
+      ],
+      "startup_healthcheck": {
+        "scheme": "http", "port": 3000, "path": "/api/health/ready",
+        "timeout_seconds": 120, "request_timeout_seconds": 10,
+        "stability_seconds": 4, "verify_tls": false
+      },
+      "completion_notes": [
+        "La base de datos debe estar restaurada antes de instalar la app: /api/health/ready consulta la tabla usuario",
+        "Restaura los uploads con pct push y tar en /app/public/uploads"
+      ]
+    }
+  }
+}

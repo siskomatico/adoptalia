@@ -10,7 +10,21 @@ const app = express();
 app.disable('x-powered-by');
 app.set('query parser', 'simple');
 app.set('trust proxy', process.env.TRUST_PROXY || 'loopback');
-app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: { policy: 'same-origin' } }));
+// WEB_DIR set = single image (Proxmox OCI): Express also serves the Angular build and takes over
+// the headers nginx used to add. Unset = classic compose behind nginx, behaviour unchanged.
+const webDir = process.env.WEB_DIR;
+if (webDir) {
+  app.use(helmet({
+    // Same CSP as the old nginx (no default-src, so the Angular app keeps working as before).
+    contentSecurityPolicy: { useDefaults: false, directives: { defaultSrc: helmet.contentSecurityPolicy.dangerouslyDisableDefaultSrc, frameAncestors: ["'none'"], objectSrc: ["'none'"], baseUri: ["'self'"] } },
+    crossOriginResourcePolicy: { policy: 'same-origin' },
+    frameguard: { action: 'deny' },
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' }
+  }));
+  app.use((req, res, next) => { res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()'); next(); });
+} else {
+  app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: { policy: 'same-origin' } }));
+}
 const origins = (process.env.CORS_ORIGINS || '').split(',').map(x => x.trim()).filter(Boolean);
 // Same-origin requests need no CORS headers. Only enable cross-origin for an explicit allowlist.
 if (origins.length) app.use(cors({ origin: origins }));
@@ -36,6 +50,21 @@ app.use('/api/auth', authLimiter, require('./routes/authRoutes'));
 app.use('/api/protectoras/registrar-protectora', authLimiter);
 for (const [prefix, route] of Object.entries({ animales: 'animal', import: 'import', protectoras: 'protectora', peticiones: 'peticion', favoritos: 'favorito', usuarios: 'usuario' })) {
   app.use(`/api/${prefix}`, require(`./routes/${route}Routes`));
+}
+if (webDir) {
+  // Same cache rules as the old nginx: hashed js/css/fonts 1h, everything else revalidated.
+  const assets = /\.(?:js|css|woff2?)$/;
+  app.use(express.static(webDir, {
+    index: false,
+    dotfiles: 'deny',
+    setHeaders: (res, file) => res.setHeader('Cache-Control', assets.test(file) ? 'public, max-age=3600' : 'no-cache')
+  }));
+  // Angular routes: anything that is not the API, uploads or a missing asset gets index.html.
+  app.get(/^(?!\/(?:api|uploads)(?:\/|$))/, (req, res, next) => {
+    if (assets.test(req.path) || req.path.split('/').some(part => part.startsWith('.'))) return next();
+    res.setHeader('Cache-Control', 'no-cache');
+    res.sendFile(path.join(webDir, 'index.html'));
+  });
 }
 app.use((req, res) => res.status(404).json({ message: 'Ruta no encontrada' }));
 app.use((err, req, res, next) => {
